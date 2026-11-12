@@ -2,7 +2,7 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
-import type { Email, Folder, Mailbox } from "~/types";
+import type { BlockedSender, Email, Folder, Mailbox } from "~/types";
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
@@ -164,6 +164,23 @@ const api = {
 	// Search
 	searchEmails: (mailboxId: string, params: Record<string, string>) =>
 		get<EmailListResponse | Email[]>(`/api/v1/mailboxes/${mailboxId}/search`, { params }),
+
+	// Blocked Senders (Global & Per-Mailbox)
+	listGlobalBlockedSenders: () =>
+		get<BlockedSender[]>("/api/v1/blocked-senders"),
+	addGlobalBlockedSender: (pattern: string, reason?: string) =>
+		post<BlockedSender>("/api/v1/blocked-senders", { pattern, ...(reason ? { reason } : {}) }),
+	deleteGlobalBlockedSender: (id: string) =>
+		del<void>(`/api/v1/blocked-senders/${encodeURIComponent(id)}`),
+	listMailboxBlockedSenders: (mailboxId: string) =>
+		get<BlockedSender[]>(`/api/v1/mailboxes/${encodeURIComponent(mailboxId)}/blocked-senders`),
+	addMailboxBlockedSender: (mailboxId: string, pattern: string, reason?: string) =>
+		post<BlockedSender>(`/api/v1/mailboxes/${encodeURIComponent(mailboxId)}/blocked-senders`, {
+			pattern,
+			...(reason ? { reason } : {}),
+		}),
+	deleteMailboxBlockedSender: (mailboxId: string, id: string) =>
+		del<void>(`/api/v1/mailboxes/${encodeURIComponent(mailboxId)}/blocked-senders/${encodeURIComponent(id)}`),
 };
 
 export default api;

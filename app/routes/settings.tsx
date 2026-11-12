@@ -3,9 +3,19 @@
 //     https://opensource.org/licenses/Apache-2.0
 
 import { Badge, Button, Input, Loader, useKumoToastManager } from "@cloudflare/kumo";
-import { RobotIcon, ArrowCounterClockwiseIcon } from "@phosphor-icons/react";
+import {
+	RobotIcon,
+	ArrowCounterClockwiseIcon,
+	ProhibitIcon,
+	CaretRightIcon,
+} from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
-import { useParams } from "react-router";
+import { Link, useParams } from "react-router";
+import SettingsTabs from "~/components/SettingsTabs";
+import {
+	useGlobalBlockedSenders,
+	useMailboxBlockedSenders,
+} from "~/queries/blocked-senders";
 import { useMailbox, useUpdateMailbox } from "~/queries/mailboxes";
 
 // Placeholder shown in the textarea when no custom prompt is set.
@@ -16,6 +26,8 @@ export default function SettingsRoute() {
 	const { mailboxId } = useParams<{ mailboxId: string }>();
 	const toastManager = useKumoToastManager();
 	const { data: mailbox } = useMailbox(mailboxId);
+	const { data: mailboxBlocked = [] } = useMailboxBlockedSenders(mailboxId);
+	const { data: globalBlocked = [] } = useGlobalBlockedSenders();
 	const updateMailboxMutation = useUpdateMailbox();
 
 	const [displayName, setDisplayName] = useState("");
@@ -54,7 +66,7 @@ export default function SettingsRoute() {
 		setAgentPrompt("");
 	};
 
-	if (!mailbox) {
+	if (!mailbox || !mailboxId) {
 		return (
 			<div className="flex justify-center py-20">
 				<Loader size="lg" />
@@ -66,9 +78,9 @@ export default function SettingsRoute() {
 
 	return (
 		<div className="max-w-2xl px-4 py-4 md:px-8 md:py-6 h-full overflow-y-auto">
-			<h1 className="text-lg font-semibold text-kumo-default mb-6">Settings</h1>
+			<SettingsTabs mailboxId={mailboxId} />
 
-			<div className="space-y-6">
+			<div className="space-y-6 pb-8">
 				{/* Account */}
 				<div className="rounded-lg border border-kumo-line bg-kumo-base p-5">
 					<div className="text-sm font-medium text-kumo-default mb-4">
@@ -125,6 +137,33 @@ export default function SettingsRoute() {
 						It controls the agent's personality, writing style, and behavior rules.
 					</p>
 				</div>
+
+				{/* Blocked Senders quick navigation card */}
+				<Link
+					to={`/mailbox/${encodeURIComponent(mailboxId)}/settings/blocked-senders`}
+					className="flex items-center justify-between gap-4 rounded-lg border border-kumo-line bg-kumo-base p-5 no-underline hover:bg-kumo-tint/40 transition-colors"
+				>
+					<div className="min-w-0">
+						<div className="flex items-center gap-2">
+							<ProhibitIcon
+								size={16}
+								weight="duotone"
+								className="text-kumo-subtle"
+							/>
+							<span className="text-sm font-medium text-kumo-default">
+								Blocked Senders
+							</span>
+							<Badge variant="secondary">
+								{mailboxBlocked.length} mailbox · {globalBlocked.length} global
+							</Badge>
+						</div>
+						<p className="text-xs text-kumo-subtle mt-1">
+							Manage blocked email addresses and domains for this mailbox or
+							across all mailboxes.
+						</p>
+					</div>
+					<CaretRightIcon size={16} className="text-kumo-subtle shrink-0" />
+				</Link>
 
 				{/* Save */}
 				<div className="flex justify-end">

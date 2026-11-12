@@ -15,6 +15,7 @@ export default [
 		index("routes/mailbox-index.tsx"),
 		route("emails/:folder", "routes/email-list.tsx"),
 		route("settings", "routes/settings.tsx"),
+		route("settings/blocked-senders", "routes/settings-blocked-senders.tsx"),
 		route("search", "routes/search-results.tsx"),
 	]),
 	route("*", "routes/not-found.tsx"),

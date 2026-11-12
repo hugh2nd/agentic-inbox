@@ -2,6 +2,8 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
+import { Badge, Button } from "@cloudflare/kumo";
+import { ProhibitIcon } from "@phosphor-icons/react";
 import EmailAttachmentList from "~/components/EmailAttachmentList";
 import EmailIframe from "~/components/EmailIframe";
 import { formatDetailDate, rewriteInlineImages } from "~/lib/utils";
@@ -10,12 +12,16 @@ import type { Email } from "~/types";
 interface SingleMessageViewProps {
 	email: Email;
 	mailboxId?: string;
+	isBlockedSender?: boolean;
+	onBlockSender?: () => void;
 	onPreviewImage: (url: string, filename: string) => void;
 }
 
 export default function SingleMessageView({
 	email,
 	mailboxId,
+	isBlockedSender,
+	onBlockSender,
 	onPreviewImage,
 }: SingleMessageViewProps) {
 	return (
@@ -27,15 +33,32 @@ export default function SingleMessageView({
 							{email.sender.charAt(0).toUpperCase()}
 						</div>
 						<div className="min-w-0">
-							<div className="text-sm font-medium text-kumo-default truncate">
-								{email.sender}
+							<div className="flex items-center gap-2">
+								<span className="text-sm font-medium text-kumo-default truncate">
+									{email.sender}
+								</span>
+								{isBlockedSender && (
+									<Badge variant="destructive">Blocked</Badge>
+								)}
 							</div>
 							<div className="text-xs text-kumo-subtle">To: {email.recipient}</div>
 						</div>
 					</div>
-					<span className="text-xs text-kumo-subtle shrink-0">
-						{formatDetailDate(email.date)}
-					</span>
+					<div className="flex items-center gap-2 shrink-0">
+						{onBlockSender && (
+							<Button
+								variant="ghost"
+								size="xs"
+								icon={<ProhibitIcon size={14} />}
+								onClick={onBlockSender}
+							>
+								Block Sender
+							</Button>
+						)}
+						<span className="text-xs text-kumo-subtle">
+							{formatDetailDate(email.date)}
+						</span>
+					</div>
 				</div>
 			</div>
 

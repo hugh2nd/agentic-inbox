@@ -15,6 +15,16 @@ import {
 	buildThreadingHeaders,
 	listMailboxes,
 } from "./lib/email-helpers";
+import {
+	type BlockedSender,
+	BlocklistValidationError,
+	addBlockedSender,
+	deleteMailboxBlockedSenders,
+	findMatchingBlockedRule,
+	listBlockedSenders,
+	removeBlockedSender,
+} from "./lib/blocklist";
+import { extractEmailAddress } from "../shared/blocklist";
 import { SendEmailRequestSchema } from "./lib/schemas";
 import { handleReplyEmail, handleForwardEmail } from "./routes/reply-forward";
 import { Folders } from "../shared/folders";
@@ -40,6 +50,11 @@ const DraftBody = z.object({
 	in_reply_to: z.string().optional(),
 	thread_id: z.string().optional(),
 	draft_id: z.string().optional(),
+});
+
+const BlockSenderBody = z.object({
+	pattern: z.string().min(1, "Pattern is required").max(320),
+	reason: z.string().max(200).optional(),
 });
 
 // -- Helpers --------------------------------------------------------
@@ -163,11 +178,79 @@ app.put("/api/v1/mailboxes/:mailboxId", async (c) => {
 });
 
 app.delete("/api/v1/mailboxes/:mailboxId", async (c) => {
-	const mailboxId = c.req.param("mailboxId")!;
+	const mailboxId = decodeURIComponent(c.req.param("mailboxId")!);
 	const key = `mailboxes/${mailboxId}.json`;
 	if (!(await c.env.BUCKET.head(key))) return c.json({ error: "Not found" }, 404);
 	await c.env.BUCKET.delete(key); // TODO: also delete DO data and R2 attachment blobs
+	await deleteMailboxBlockedSenders(c.env.BUCKET, mailboxId.toLowerCase());
 	return c.body(null, 204);
+});
+
+// -- Blocked Senders (Global & Per-Mailbox) -------------------------
+
+app.get("/api/v1/blocked-senders", async (c) => {
+	const entries = await listBlockedSenders(c.env.BUCKET, "global");
+	return c.json(entries);
+});
+
+app.post("/api/v1/blocked-senders", async (c) => {
+	const parsed = BlockSenderBody.safeParse(await c.req.json().catch(() => null));
+	if (!parsed.success) {
+		return c.json({ error: parsed.error.issues[0]?.message || "Invalid request body" }, 400);
+	}
+	try {
+		const { entry, created } = await addBlockedSender(c.env.BUCKET, {
+			pattern: parsed.data.pattern,
+			reason: parsed.data.reason,
+			target: "global",
+		});
+		if (!created) {
+			return c.json({ error: `${entry.pattern} is already blocked globally`, existing: entry }, 409);
+		}
+		return c.json(entry, 201);
+	} catch (e) {
+		if (e instanceof BlocklistValidationError) return c.json({ error: e.message }, 400);
+		throw e;
+	}
+});
+
+app.delete("/api/v1/blocked-senders/:id", async (c) => {
+	const ok = await removeBlockedSender(c.env.BUCKET, c.req.param("id")!, "global");
+	return ok ? c.body(null, 204) : c.json({ error: "Blocked sender not found" }, 404);
+});
+
+app.get("/api/v1/mailboxes/:mailboxId/blocked-senders", async (c: AppContext) => {
+	const mailboxId = decodeURIComponent(c.req.param("mailboxId")!).toLowerCase();
+	const entries = await listBlockedSenders(c.env.BUCKET, { mailboxId });
+	return c.json(entries);
+});
+
+app.post("/api/v1/mailboxes/:mailboxId/blocked-senders", async (c: AppContext) => {
+	const mailboxId = decodeURIComponent(c.req.param("mailboxId")!).toLowerCase();
+	const parsed = BlockSenderBody.safeParse(await c.req.json().catch(() => null));
+	if (!parsed.success) {
+		return c.json({ error: parsed.error.issues[0]?.message || "Invalid request body" }, 400);
+	}
+	try {
+		const { entry, created } = await addBlockedSender(c.env.BUCKET, {
+			pattern: parsed.data.pattern,
+			reason: parsed.data.reason,
+			target: { mailboxId },
+		});
+		if (!created) {
+			return c.json({ error: `${entry.pattern} is already blocked for this mailbox`, existing: entry }, 409);
+		}
+		return c.json(entry, 201);
+	} catch (e) {
+		if (e instanceof BlocklistValidationError) return c.json({ error: e.message }, 400);
+		throw e;
+	}
+});
+
+app.delete("/api/v1/mailboxes/:mailboxId/blocked-senders/:id", async (c: AppContext) => {
+	const mailboxId = decodeURIComponent(c.req.param("mailboxId")!).toLowerCase();
+	const ok = await removeBlockedSender(c.env.BUCKET, c.req.param("id")!, { mailboxId });
+	return ok ? c.body(null, 204) : c.json({ error: "Blocked sender not found" }, 404);
 });
 
 // -- Emails ---------------------------------------------------------
@@ -375,13 +458,85 @@ async function streamToArrayBuffer(stream: ReadableStream, streamSize: number) {
 	return result;
 }
 
-async function receiveEmail(event: { raw: ReadableStream; rawSize: number }, env: Env, ctx: ExecutionContext) {
+export interface InboundEmailEvent {
+	readonly from?: string;
+	readonly to?: string;
+	readonly headers?: Headers;
+	readonly raw: ReadableStream<Uint8Array>;
+	readonly rawSize: number;
+	setReject(reason: string): void;
+}
+
+const BLOCKED_SENDER_REJECT_REASON = "Sender is blocked";
+
+async function receiveEmail(event: InboundEmailEvent, env: Env, ctx: ExecutionContext) {
+	const allowedAddresses = ((env.EMAIL_ADDRESSES ?? []) as string[]).map((a) => a.toLowerCase());
+	const mailboxExistsCache = new Map<string, Promise<boolean>>();
+	const mailboxRulesCache = new Map<string, Promise<BlockedSender[]>>();
+
+	const mailboxExists = (mbId: string) => {
+		const key = mbId.toLowerCase();
+		let p = mailboxExistsCache.get(key);
+		if (!p) {
+			p = env.BUCKET.head(`mailboxes/${key}.json`).then(Boolean);
+			mailboxExistsCache.set(key, p);
+		}
+		return p;
+	};
+
+	const getMailboxRules = (mbId: string) => {
+		const key = mbId.toLowerCase();
+		let p = mailboxRulesCache.get(key);
+		if (!p) {
+			p = listBlockedSenders(env.BUCKET, { mailboxId: key });
+			mailboxRulesCache.set(key, p);
+		}
+		return p;
+	};
+
+	// 1. Check blocklist first (pre-stream fast path using envelope & outer headers)
+	const globalRules = await listBlockedSenders(env.BUCKET, "global");
+	const earlySenders = [event.from, event.headers?.get("from")];
+
+	if (findMatchingBlockedRule(earlySenders, globalRules)) {
+		event.setReject(BLOCKED_SENDER_REJECT_REASON);
+		return;
+	}
+
+	const envelopeTo = extractEmailAddress(event.to);
+	if (
+		envelopeTo &&
+		(allowedAddresses.length === 0 || allowedAddresses.includes(envelopeTo)) &&
+		(await mailboxExists(envelopeTo))
+	) {
+		const earlyMailboxRules = await getMailboxRules(envelopeTo);
+		if (findMatchingBlockedRule(earlySenders, earlyMailboxRules)) {
+			event.setReject(BLOCKED_SENDER_REJECT_REASON);
+			return;
+		}
+	}
+
+	// 2. Parse MIME headers/body in memory and verify parsed From against blocklists
 	const rawEmail = await streamToArrayBuffer(event.raw, event.rawSize);
 	const parsedEmail = await new PostalMime().parse(rawEmail);
 
+	const mimeFromHeaders = (parsedEmail.headers || [])
+		.filter((h) => h.key.toLowerCase() === "from")
+		.map((h) => h.value);
+	const allSenderCandidates = [
+		event.from,
+		event.headers?.get("from"),
+		parsedEmail.from?.address,
+		...mimeFromHeaders,
+	];
+
+	if (findMatchingBlockedRule(allSenderCandidates, globalRules)) {
+		event.setReject(BLOCKED_SENDER_REJECT_REASON);
+		return;
+	}
+
 	if (!parsedEmail.to?.length || !parsedEmail.to[0].address) throw new Error("received email with empty to");
 
-	const allowedAddresses = ((env.EMAIL_ADDRESSES ?? []) as string[]).map((a) => a.toLowerCase());
 	const allRecipients = parsedEmail.to.map((t) => t.address?.toLowerCase()).filter(Boolean) as string[];
 	const ccRecipients = (parsedEmail.cc || []).map((e) => e.address?.toLowerCase()).filter(Boolean) as string[];
 	const bccRecipients = (parsedEmail.bcc || []).map((e) => e.address?.toLowerCase()).filter(Boolean) as string[];
@@ -393,8 +548,15 @@ async function receiveEmail(event: { raw: ReadableStream; rawSize: number }, env
 	} else { mailboxId = allRecipients[0]; }
 	if (!mailboxId) throw new Error("received email with no valid recipient address");
 
+	if (!(await mailboxExists(mailboxId))) { console.log(`Ignoring email for ${mailboxId}: mailbox does not exist`); return; }
+
+	const mailboxRules = await getMailboxRules(mailboxId);
+	if (findMatchingBlockedRule(allSenderCandidates, mailboxRules)) {
+		event.setReject(BLOCKED_SENDER_REJECT_REASON);
+		return;
+	}
+
 	const messageId = crypto.randomUUID();
-	if (!(await env.BUCKET.head(`mailboxes/${mailboxId}.json`))) { console.log(`Ignoring email for ${mailboxId}: mailbox does not exist`); return; }
 
 	const stub = env.MAILBOX.get(env.MAILBOX.idFromName(mailboxId));
 

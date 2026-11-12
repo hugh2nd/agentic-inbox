@@ -23,5 +23,10 @@ export const queryKeys = {
 		results: (mailboxId: string, query: string, page: number) =>
 			["search", mailboxId, query, page] as const,
 	},
+	blockedSenders: {
+		global: ["blocked-senders", "global"] as const,
+		mailbox: (mailboxId: string) =>
+			["blocked-senders", "mailbox", mailboxId.toLowerCase()] as const,
+	},
 	config: ["config"] as const,
 };

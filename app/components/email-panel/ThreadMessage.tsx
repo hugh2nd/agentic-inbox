@@ -9,6 +9,7 @@ import {
 	CodeIcon,
 	PaperPlaneTiltIcon,
 	PencilSimpleIcon,
+	ProhibitIcon,
 	TrashIcon,
 } from "@phosphor-icons/react";
 import EmailAttachmentList from "~/components/EmailAttachmentList";
@@ -33,6 +34,8 @@ interface ThreadMessageProps {
 	onSendDraft?: () => void;
 	onEditDraft?: () => void;
 	onDeleteDraft?: () => void;
+	isBlockedSender?: boolean;
+	onBlockSender?: () => void;
 	onViewSource?: () => void;
 	onPreviewImage?: (url: string, filename: string) => void;
 }
@@ -65,6 +68,8 @@ export default function ThreadMessage({
 	onSendDraft,
 	onEditDraft,
 	onDeleteDraft,
+	isBlockedSender,
+	onBlockSender,
 	onViewSource,
 	onPreviewImage,
 }: ThreadMessageProps) {
@@ -121,6 +126,9 @@ export default function ThreadMessage({
 									{senderLabel}
 								</span>
 								{isDraft && <Badge variant="outline">Draft</Badge>}
+								{!isDraft && !isSelf && isBlockedSender && (
+									<Badge variant="destructive">Blocked</Badge>
+								)}
 							</div>
 							<div className="text-xs text-kumo-subtle">To: {email.recipient}</div>
 						</div>
@@ -129,6 +137,19 @@ export default function ThreadMessage({
 						<span className="text-xs text-kumo-subtle">
 							{formatShortDate(email.date)}
 						</span>
+						{!isDraft && !isSelf && onBlockSender && (
+							<Tooltip content="Block Sender" side="bottom" asChild>
+								<Button
+									variant="ghost"
+									shape="square"
+									size="sm"
+									icon={<ProhibitIcon size={14} />}
+									onClick={onBlockSender}
+									aria-label="Block Sender"
+									className="transition-opacity !h-6 !w-6"
+								/>
+							</Tooltip>
+						)}
 						{onViewSource && (
 							<Tooltip content="View source" side="bottom" asChild>
 								<Button

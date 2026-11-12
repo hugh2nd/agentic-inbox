@@ -5,7 +5,9 @@
 import { useKumoToastManager } from "@cloudflare/kumo";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router";
+import { extractEmailAddress, findMatchingBlockedRule } from "shared/blocklist";
 import { Folders } from "shared/folders";
+import BlockSenderDialog from "~/components/email-panel/BlockSenderDialog";
 import EmailPanelDialogs from "~/components/email-panel/EmailPanelDialogs";
 import EmailPanelHeader from "~/components/email-panel/EmailPanelHeader";
 import EmailPanelToolbar from "~/components/email-panel/EmailPanelToolbar";
@@ -13,6 +15,10 @@ import SingleMessageView from "~/components/email-panel/SingleMessageView";
 import ThreadMessage from "~/components/email-panel/ThreadMessage";
 import { splitEmailList, toEmailListValue } from "~/lib/utils";
 import api from "~/services/api";
+import {
+	useGlobalBlockedSenders,
+	useMailboxBlockedSenders,
+} from "~/queries/blocked-senders";
 import { useDeleteEmail, useEmail, useMoveEmail, useReplyToEmail, useSendEmail, useThreadReplies, useUpdateEmail } from "~/queries/emails";
 import { useFolders } from "~/queries/folders";
 import { useMailbox } from "~/queries/mailboxes";
@@ -44,10 +50,13 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 	const { data: currentMailbox } = useMailbox(mailboxId) as {
 		data?: Mailbox;
 	};
+	const { data: globalBlocked = [] } = useGlobalBlockedSenders();
+	const { data: mailboxBlocked = [] } = useMailboxBlockedSenders(mailboxId);
 	const { closePanel, startCompose } = useUIStore();
 	const toastManager = useKumoToastManager();
 	const [isSending, setIsSending] = useState(false);
 	const [sourceViewEmail, setSourceViewEmail] = useState<Email | null>(null);
+	const [blockSenderTarget, setBlockSenderTarget] = useState<string | null>(null);
 	const [expandedMessages, setExpandedMessages] = useState<Set<string>>(new Set());
 	const [previewImage, setPreviewImage] = useState<{ url: string; filename: string } | null>(null);
 	const isDraftFolder = folder === Folders.DRAFT;
@@ -84,8 +93,27 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 	}, [allMessages, draftMessageIds, currentMailbox?.email, email]);
 
 	const moveToFolders = useMemo(() => { const cur = folder || email?.folder_id; return folders.filter((f) => f.id !== cur); }, [folders, folder, email?.folder_id]);
+	const activeBlockedRules = useMemo(
+		() => [...globalBlocked, ...mailboxBlocked],
+		[globalBlocked, mailboxBlocked],
+	);
+	const ownEmail = (currentMailbox?.email || mailboxId || "").toLowerCase();
+	const canBlockSender = (sender: string | undefined) => {
+		const addr = extractEmailAddress(sender);
+		return Boolean(addr && addr !== ownEmail);
+	};
+	const isSenderBlocked = (sender: string | undefined) =>
+		Boolean(findMatchingBlockedRule([sender], activeBlockedRules));
 
 	if (!email) return <EmailPanelSkeleton />;
+
+	const toolbarBlockSender =
+		!isDraftFolder &&
+		lastReceivedMessage &&
+		!draftMessageIds.has(lastReceivedMessage.id) &&
+		canBlockSender(lastReceivedMessage.sender)
+			? lastReceivedMessage.sender
+			: null;
 
 	const toggleStar = () => { if (mailboxId) updateEmail.mutate({ mailboxId, id: email.id, data: { starred: !email.starred } }); };
 	const handleMove = (folderId: string) => { if (mailboxId) { moveEmailMut.mutate({ mailboxId, id: email.id, folderId }); closePanel(); } };
@@ -171,6 +199,11 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 					}
 				}}
 				onMove={handleMove}
+				onBlockSender={
+					toolbarBlockSender
+						? () => setBlockSenderTarget(toolbarBlockSender)
+						: undefined
+				}
 				onViewSource={() => setSourceViewEmail(email)}
 				onDelete={handleDelete}
 			/>
@@ -199,6 +232,12 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 								onSendDraft={isDraft ? () => handleSendDraft(msg) : undefined}
 								onEditDraft={isDraft ? () => handleEditDraft(msg) : undefined}
 								onDeleteDraft={isDraft ? () => handleDeleteDraft(msg) : undefined}
+								isBlockedSender={isSenderBlocked(msg.sender)}
+								onBlockSender={
+									!isDraft && canBlockSender(msg.sender)
+										? () => setBlockSenderTarget(msg.sender)
+										: undefined
+								}
 								onViewSource={() => setSourceViewEmail(msg)}
 								onPreviewImage={(url, filename) =>
 									setPreviewImage({ url, filename })
@@ -210,6 +249,14 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 					<SingleMessageView
 						email={email}
 						mailboxId={mailboxId}
+						isBlockedSender={isSenderBlocked(email.sender)}
+						onBlockSender={
+							!isDraftFolder &&
+							!draftMessageIds.has(email.id) &&
+							canBlockSender(email.sender)
+								? () => setBlockSenderTarget(email.sender)
+								: undefined
+						}
 						onPreviewImage={(url, filename) =>
 							setPreviewImage({ url, filename })
 						}
@@ -222,6 +269,15 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 				previewImage={previewImage}
 				onCloseSource={() => setSourceViewEmail(null)}
 				onClosePreview={() => setPreviewImage(null)}
+			/>
+
+			<BlockSenderDialog
+				sender={blockSenderTarget}
+				mailboxId={mailboxId}
+				mailboxEmail={currentMailbox?.email}
+				globalBlocked={globalBlocked}
+				mailboxBlocked={mailboxBlocked}
+				onClose={() => setBlockSenderTarget(null)}
 			/>
 		</div>
 	);

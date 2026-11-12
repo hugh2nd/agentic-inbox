@@ -15,6 +15,7 @@ import {
 	FolderSimpleIcon,
 	PaperPlaneTiltIcon,
 	PencilSimpleIcon,
+	ProhibitIcon,
 	StarIcon,
 	TrashIcon,
 	XIcon,
@@ -37,6 +38,7 @@ interface EmailPanelToolbarProps {
 	onToggleStar: () => void;
 	onToggleRead: () => void;
 	onMove: (folderId: string) => void;
+	onBlockSender?: () => void;
 	onViewSource: () => void;
 	onDelete: () => void;
 }
@@ -56,6 +58,7 @@ export default function EmailPanelToolbar({
 	onToggleStar,
 	onToggleRead,
 	onMove,
+	onBlockSender,
 	onViewSource,
 	onDelete,
 }: EmailPanelToolbarProps) {
@@ -157,6 +160,19 @@ export default function EmailPanelToolbar({
 			</Tooltip>
 
 			<MoveToFolderMenu folders={moveToFolders} onMove={onMove} />
+
+			{onBlockSender && (
+				<Tooltip content="Block Sender" side="bottom" asChild>
+					<Button
+						variant="ghost"
+						shape="square"
+						size="sm"
+						icon={<ProhibitIcon size={18} />}
+						onClick={onBlockSender}
+						aria-label="Block Sender"
+					/>
+				</Tooltip>
+			)}
 
 			<div className="ml-auto flex items-center gap-0.5">
 				<Tooltip content="View source" side="bottom" asChild>
