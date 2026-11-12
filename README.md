@@ -19,7 +19,7 @@ https://github.com/cloudflare/agentic-inbox/issues/4#issuecomment-4269118513
 
 ### To set up
 
-1. Deploy to Cloudflare. The deploy flow will automatically provision R2, Durable Objects, and Workers AI. You'll be prompted for **DOMAINS**, which is the domain (yourdomain.com) you want to receive emails for (email@yourdomain.com).
+1. Deploy to Cloudflare. The deploy flow will automatically provision R2, Durable Objects, and Workers AI. In the Worker's **Settings > Variables and Secrets**, set `DOMAINS` to your mailbox domain (for example, `yourdomain.com`); separate multiple domains with commas. For local development, copy `.dev.vars.example` to `.dev.vars` and set `DOMAINS` there. The Wrangler configuration preserves dashboard variables on subsequent deployments.
 
      [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/cloudflare/agentic-inbox)
 
