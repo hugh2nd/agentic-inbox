@@ -162,6 +162,11 @@ export default function HomeRoute() {
 					)}
 				</div>
 
+				<RouterLink to="/all-inboxes" className="mb-4 flex items-center gap-4 rounded-xl border border-kumo-line bg-kumo-base px-5 py-4 no-underline hover:bg-kumo-tint">
+					<EnvelopeIcon size={24} className="text-kumo-default" />
+					<span className="font-medium text-kumo-default">All Inboxes</span>
+				</RouterLink>
+
 				{isLoading ? (
 					<div className="flex justify-center py-20">
 						<Loader size="lg" />

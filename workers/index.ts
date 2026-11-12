@@ -92,6 +92,36 @@ app.get("/api/v1/config", (c) => {
 	return c.json({ domains, emailAddresses });
 });
 
+// A cursor identifies the last emitted row in the global (date, mailbox, id) order.
+const UnifiedCursor = z.object({ date: z.string(), mailboxId: z.string(), id: z.string() });
+app.get("/api/v1/unified-inbox", async (c) => {
+	const rawCursor = c.req.query("cursor");
+	let cursor: z.infer<typeof UnifiedCursor> | undefined;
+	if (rawCursor) {
+		try { cursor = UnifiedCursor.parse(JSON.parse(rawCursor)); }
+		catch { return c.json({ error: "Invalid cursor" }, 400); }
+	}
+	const query = c.req.query("query")?.trim().slice(0, 500);
+	const unread = c.req.query("unread") === "true";
+	const limit = 25;
+	const mailboxes = await listMailboxes(c.env.BUCKET);
+	const batches = await Promise.all(mailboxes.map(async (mailbox) => {
+		const stub = c.env.MAILBOX.get(c.env.MAILBOX.idFromName(mailbox.id));
+		// For equal dates, mailbox IDs and then message IDs sort descending.
+		const boundary = cursor && (mailbox.id < cursor.mailboxId
+			? { date: cursor.date, id: cursor.id, includeDate: true }
+			: { date: cursor.date, id: mailbox.id === cursor.mailboxId ? cursor.id : "", includeDate: false });
+		const rows: { id: string; date: string; [key: string]: unknown }[] = await (stub as any).getUnifiedInbox({ query, unread, limit: limit + 1, cursor: boundary });
+		return rows.map((row) => ({ ...row, mailboxId: mailbox.id, mailboxEmail: mailbox.email }));
+	}));
+	const compare = (a: string, b: string) => a === b ? 0 : a > b ? -1 : 1;
+	const sorted = batches.flat().sort((a, b) => compare(a.date, b.date) || compare(a.mailboxId, b.mailboxId) || compare(a.id, b.id));
+	const emails = sorted.slice(0, limit);
+	const last = emails[emails.length - 1];
+	return c.json({ emails, nextCursor: sorted.length > limit && last
+		? JSON.stringify({ date: last.date, mailboxId: last.mailboxId, id: last.id }) : null });
+});
+
 // -- Mailboxes ------------------------------------------------------
 
 app.get("/api/v1/mailboxes", async (c) => {

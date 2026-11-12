@@ -722,6 +722,31 @@ export class MailboxDO extends DurableObject<Env> {
 		}));
 	}
 
+	/** A bounded, stable page of individual inbox messages for cross-mailbox merging. */
+	async getUnifiedInbox(options: { query?: string; unread?: boolean; limit: number; cursor?: { date: string; id: string; includeDate: boolean } }) {
+		const { conditions, params } = this.#buildSearchConditions({
+			folder: "inbox", query: options.query ?? "",
+			is_read: options.unread ? false : undefined,
+		}, "e");
+		if (options.cursor) {
+			const dateParam = `?${params.length + 1}`;
+			params.push(options.cursor.date);
+			if (options.cursor.includeDate) {
+				conditions.push(`(e.date < ${dateParam} OR e.date = ${dateParam})`);
+			} else {
+				const idParam = `?${params.length + 1}`;
+				params.push(options.cursor.id);
+				conditions.push(`(e.date < ${dateParam} OR (e.date = ${dateParam} AND e.id < ${idParam}))`);
+			}
+		}
+		params.push(Math.min(Math.max(options.limit, 1), 100));
+		const rows = this.ctx.storage.sql.exec(`SELECT e.id, e.subject, e.sender, e.recipient, e.date,
+			e.read, e.starred, e.thread_id, e.folder_id, SUBSTR(e.body, 1, 300) AS snippet
+			FROM emails e WHERE ${conditions.join(" AND ")}
+			ORDER BY e.date DESC, e.id DESC LIMIT ?${params.length}`, ...params);
+		return [...rows].map((row: any) => ({ ...row, read: !!row.read, starred: !!row.starred }));
+	}
+
 	/**
 	 * Count total search results matching the given filters (for pagination).
 	 */

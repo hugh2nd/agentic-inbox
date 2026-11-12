@@ -18,7 +18,7 @@ import {
 } from "@phosphor-icons/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "react-router";
+import { useLocation, useParams } from "react-router";
 import { Folders } from "shared/folders";
 import { formatListDate } from "shared/dates";
 import MailboxSplitView from "~/components/MailboxSplitView";
@@ -154,6 +154,7 @@ export default function EmailListRoute() {
 	} = useUIStore();
 	const [page, setPage] = useState(1);
 
+	const location = useLocation();
 	const queryClient = useQueryClient();
 	const updateEmail = useUpdateEmail();
 	const markThreadRead = useMarkThreadRead();
@@ -198,6 +199,14 @@ export default function EmailListRoute() {
 			setPage(1);
 		}
 	}, [mailboxId, folder, closePanel]);
+
+	useEffect(() => {
+		const target = (location.state as { emailId?: string } | null)?.emailId;
+		if (!target || !mailboxId) return;
+		selectEmail(target);
+		updateEmail.mutate({ mailboxId, id: target, data: { read: true } });
+		window.history.replaceState({ ...window.history.state, usr: null }, "");
+	}, [location.key, mailboxId]);
 
 	const toggleStar = (e: React.MouseEvent, email: Email) => {
 		e.preventDefault();
