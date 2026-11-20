@@ -24,7 +24,7 @@ import { formatListDate } from "shared/dates";
 import { Folders } from "shared/folders";
 import EmailPanel from "~/components/EmailPanel";
 import BlockSenderDialog from "~/components/email-panel/BlockSenderDialog";
-import { getSnippetText } from "~/lib/utils";
+import { getFullEmailText } from "~/lib/utils";
 import {
 	useGlobalBlockedSenders,
 	useMailboxBlockedSenders,
@@ -289,14 +289,14 @@ export default function UnifiedInbox() {
 											</div>
 
 											<div
-												className={`truncate text-sm mt-1 text-kumo-default ${
+												className={`text-sm mt-1 text-kumo-default break-words ${
 													!email.read ? "font-semibold" : ""
 												}`}
 											>
 												{email.subject || "(No subject)"}
 											</div>
-											<div className="truncate text-xs text-kumo-subtle mt-0.5">
-												{getSnippetText(email.snippet)}
+											<div className="text-xs text-kumo-subtle mt-1 whitespace-pre-wrap break-words leading-relaxed">
+												{getFullEmailText(email.body ?? email.snippet)}
 											</div>
 										</div>
 

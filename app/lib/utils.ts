@@ -116,6 +116,30 @@ export function getSnippetText(
 }
 
 /**
+ * Convert full HTML or plain-text email body into readable multi-line plain text
+ * without truncating content.
+ */
+export function getFullEmailText(body?: string | null): string {
+	if (!body) return "";
+
+	const withNewlines = body
+		.replace(/<head[^>]*>[\s\S]*?<\/head>/gi, "")
+		.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+		.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+		.replace(/<br\s*\/?>/gi, "\n")
+		.replace(/<\/(?:p|div|tr|li|h[1-6]|blockquote|section|article)>/gi, "\n")
+		.replace(/<[^>]*>/g, " ");
+
+	return decodeHtmlEntities(withNewlines)
+		.replace(/\r\n?/g, "\n")
+		.split("\n")
+		.map((line) => line.replace(/[ \t]+/g, " ").trim())
+		.join("\n")
+		.replace(/\n{3,}/g, "\n\n")
+		.trim();
+}
+
+/**
  * Escape all five OWASP-recommended HTML special characters in plain text.
  * Safe for use in both text content and attribute contexts.
  */

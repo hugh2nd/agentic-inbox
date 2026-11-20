@@ -741,7 +741,7 @@ export class MailboxDO extends DurableObject<Env> {
 		}
 		params.push(Math.min(Math.max(options.limit, 1), 100));
 		const rows = this.ctx.storage.sql.exec(`SELECT e.id, e.subject, e.sender, e.recipient, e.date,
-			e.read, e.starred, e.thread_id, e.folder_id, SUBSTR(e.body, 1, 300) AS snippet
+			e.read, e.starred, e.thread_id, e.folder_id, e.body, SUBSTR(e.body, 1, 300) AS snippet
 			FROM emails e WHERE ${conditions.join(" AND ")}
 			ORDER BY e.date DESC, e.id DESC LIMIT ?${params.length}`, ...params);
 		return [...rows].map((row: any) => ({ ...row, read: !!row.read, starred: !!row.starred }));
