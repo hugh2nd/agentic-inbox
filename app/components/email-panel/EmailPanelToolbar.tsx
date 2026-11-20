@@ -27,6 +27,7 @@ interface EmailPanelToolbarProps {
 	mailboxId?: string;
 	isDraftFolder: boolean;
 	isSending: boolean;
+	hideComposeActions?: boolean;
 	moveToFolders: Folder[];
 	lastReceivedMessage?: Email;
 	onBack: () => void;
@@ -48,6 +49,7 @@ export default function EmailPanelToolbar({
 	mailboxId,
 	isDraftFolder,
 	isSending,
+	hideComposeActions,
 	moveToFolders,
 	onBack,
 	onSendDraft,
@@ -74,62 +76,66 @@ export default function EmailPanelToolbar({
 				className="md:hidden shrink-0"
 			/>
 
-			{isDraftFolder ? (
+			{!hideComposeActions && (
 				<>
-					<Button
-						variant="primary"
-						size="sm"
-						icon={<PaperPlaneTiltIcon size={16} />}
-						onClick={onSendDraft}
-						loading={isSending}
-					>
-						{isSending ? "Sending..." : "Send"}
-					</Button>
-					<Button
-						variant="secondary"
-						size="sm"
-						icon={<PencilSimpleIcon size={16} />}
-						onClick={onEditDraft}
-					>
-						Edit
-					</Button>
-				</>
-			) : (
-				<>
-					<Tooltip content="Reply" side="bottom" asChild>
-						<Button
-							variant="ghost"
-							shape="square"
-							size="sm"
-							icon={<ArrowBendUpLeftIcon size={18} />}
-							onClick={onReply}
-							aria-label="Reply"
-						/>
-					</Tooltip>
-					<Tooltip content="Reply All" side="bottom" asChild>
-						<Button
-							variant="ghost"
-							shape="square"
-							size="sm"
-							icon={<ChatCircleIcon size={18} />}
-							onClick={onReplyAll}
-							aria-label="Reply All"
-						/>
-					</Tooltip>
-					<Tooltip content="Forward" side="bottom" asChild>
-						<Button
-							variant="ghost"
-							shape="square"
-							size="sm"
-							icon={<ArrowBendUpRightIcon size={18} />}
-							onClick={onForward}
-							aria-label="Forward"
-						/>
-					</Tooltip>
+					{isDraftFolder ? (
+						<>
+							<Button
+								variant="primary"
+								size="sm"
+								icon={<PaperPlaneTiltIcon size={16} />}
+								onClick={onSendDraft}
+								loading={isSending}
+							>
+								{isSending ? "Sending..." : "Send"}
+							</Button>
+							<Button
+								variant="secondary"
+								size="sm"
+								icon={<PencilSimpleIcon size={16} />}
+								onClick={onEditDraft}
+							>
+								Edit
+							</Button>
+						</>
+					) : (
+						<>
+							<Tooltip content="Reply" side="bottom" asChild>
+								<Button
+									variant="ghost"
+									shape="square"
+									size="sm"
+									icon={<ArrowBendUpLeftIcon size={18} />}
+									onClick={onReply}
+									aria-label="Reply"
+								/>
+							</Tooltip>
+							<Tooltip content="Reply All" side="bottom" asChild>
+								<Button
+									variant="ghost"
+									shape="square"
+									size="sm"
+									icon={<ChatCircleIcon size={18} />}
+									onClick={onReplyAll}
+									aria-label="Reply All"
+								/>
+							</Tooltip>
+							<Tooltip content="Forward" side="bottom" asChild>
+								<Button
+									variant="ghost"
+									shape="square"
+									size="sm"
+									icon={<ArrowBendUpRightIcon size={18} />}
+									onClick={onForward}
+									aria-label="Forward"
+								/>
+							</Tooltip>
+						</>
+					)}
+
+					<div className="h-5 w-px bg-kumo-fill mx-0.5" />
 				</>
 			)}
-
-			<div className="h-5 w-px bg-kumo-fill mx-0.5" />
 
 			<Tooltip content={email.starred ? "Unstar" : "Star"} side="bottom" asChild>
 				<Button

@@ -35,8 +35,24 @@ function EmailPanelSkeleton() {
 	);
 }
 
-export default function EmailPanel({ emailId }: { emailId: string }) {
-	const { mailboxId, folder } = useParams<{ mailboxId: string; folder: string }>();
+interface EmailPanelProps {
+	emailId: string;
+	mailboxId?: string;
+	folder?: string;
+	onClose?: () => void;
+	hideComposeActions?: boolean;
+}
+
+export default function EmailPanel({
+	emailId,
+	mailboxId: mailboxIdProp,
+	folder: folderProp,
+	onClose,
+	hideComposeActions,
+}: EmailPanelProps) {
+	const params = useParams<{ mailboxId: string; folder: string }>();
+	const mailboxId = mailboxIdProp ?? params.mailboxId;
+	const folder = folderProp ?? params.folder;
 	const { data: email } = useEmail(mailboxId, emailId) as { data?: Email };
 	const { data: threadRepliesRaw } = useThreadReplies(mailboxId, email?.thread_id) as {
 		data?: Email[];
@@ -115,9 +131,21 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 			? lastReceivedMessage.sender
 			: null;
 
+	const handleClose = onClose ?? closePanel;
 	const toggleStar = () => { if (mailboxId) updateEmail.mutate({ mailboxId, id: email.id, data: { starred: !email.starred } }); };
-	const handleMove = (folderId: string) => { if (mailboxId) { moveEmailMut.mutate({ mailboxId, id: email.id, folderId }); closePanel(); } };
-	const handleDelete = () => { if (mailboxId) { if (!window.confirm("Are you sure you want to delete this email?")) return; deleteEmailMut.mutate({ mailboxId, id: email.id }); closePanel(); } };
+	const handleMove = (folderId: string) => { if (mailboxId) { moveEmailMut.mutate({ mailboxId, id: email.id, folderId }); handleClose(); } };
+	const handleDelete = () => {
+		if (!mailboxId) return;
+		if (!window.confirm("Are you sure you want to delete this email?")) return;
+		deleteEmailMut.mutate(
+			{ mailboxId, id: email.id },
+			{
+				onSuccess: () => toastManager.add({ title: "Email deleted" }),
+				onError: () => toastManager.add({ title: "Failed to delete email", variant: "error" }),
+			},
+		);
+		handleClose();
+	};
 
 	const handleEditDraft = (draftMsg?: Email) => {
 		const target = draftMsg || email;
@@ -131,7 +159,7 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 		if (!window.confirm("Discard this draft?")) return;
 		deleteEmailMut.mutate({ mailboxId, id: target.id });
 		toastManager.add({ title: "Draft discarded" });
-		if (target.id === emailId) closePanel();
+		if (target.id === emailId) handleClose();
 	};
 
 	const handleSendDraft = async (draftMsg?: Email) => {
@@ -174,8 +202,9 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 				mailboxId={mailboxId}
 				isDraftFolder={isDraftFolder}
 				isSending={isSending}
+				hideComposeActions={hideComposeActions}
 				moveToFolders={moveToFolders}
-				onBack={closePanel}
+				onBack={handleClose}
 				onSendDraft={() => handleSendDraft()}
 				onEditDraft={() => handleEditDraft()}
 				onReply={() =>
